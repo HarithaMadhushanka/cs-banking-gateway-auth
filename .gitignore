@@ -1,0 +1,27 @@
+# --- OS / Editor ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Laravel ---
+/auth-service/vendor/
+/auth-service/node_modules/
+/auth-service/storage/*.key
+/auth-service/storage/logs/
+/auth-service/storage/framework/cache/
+/auth-service/storage/framework/sessions/
+/auth-service/storage/framework/views/
+/auth-service/.env
+/auth-service/.env.*
+/auth-service/bootstrap/cache/*.php
+/auth-service/public/storage
+
+# --- Composer / NPM caches ---
+composer.lock  # (see note below)
+package-lock.json
+yarn.lock
+
+# --- Docker / local volumes ---
+mysql_data/
+*.log
