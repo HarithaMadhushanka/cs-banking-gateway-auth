@@ -19,35 +19,65 @@ class VerifyJwt
         }
 
         $token = trim($m[1]);
-        $secret = env('JWT_SECRET');
+        if ($token === '') {
+            return response()->json(['message' => 'missing token'], 401);
+        }
 
+        $secret = env('JWT_SECRET');
         if (!$secret) {
             return response()->json(['message' => 'JWT_SECRET not set'], 500);
         }
 
         try {
-            \Firebase\JWT\JWT::$leeway = 30; // seconds of clock skew tolerance
+            // Allow clock skew (seconds) when validating exp/nbf/iat
+            JWT::$leeway = 30;
 
-            // validates signature + exp/iat/nbf automatically
+            // Validates signature + exp/iat/nbf automatically
             $decoded = JWT::decode($token, new Key($secret, 'HS256'));
-
             $claims = (array) $decoded;
 
-            $required = ['iss', 'aud', 'sub', 'iat', 'exp', 'jti'];
+            // Required claims
+            $required = ['typ', 'iss', 'aud', 'sub', 'iat', 'nbf', 'exp', 'jti'];
             foreach ($required as $k) {
                 if (!array_key_exists($k, $claims)) {
                     return response()->json(['message' => 'invalid token'], 401);
                 }
             }
 
-            if (($claims['iss'] ?? null) !== config('app.url')) {
+            // Type
+            if (($claims['typ'] ?? null) !== 'access') {
                 return response()->json(['message' => 'invalid token'], 401);
             }
 
+            // Issuer & audience
+            if (($claims['iss'] ?? null) !== config('app.url')) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
             if (($claims['aud'] ?? null) !== 'banking-gateway') {
                 return response()->json(['message' => 'invalid token'], 401);
             }
 
+            // Subject sanity (user id)
+            if (!is_int($claims['sub']) && !(is_string($claims['sub']) && ctype_digit($claims['sub']))) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
+            // Time claim sanity (must be ints)
+            foreach (['iat', 'nbf', 'exp'] as $t) {
+                if (!is_int($claims[$t]) && !(is_string($claims[$t]) && ctype_digit($claims[$t]))) {
+                    return response()->json(['message' => 'invalid token'], 401);
+                }
+                $claims[$t] = (int) $claims[$t];
+            }
+
+            // Extra hardening: reject tokens with iat too far in the future
+            // (still allows JWT::$leeway slack)
+            $now = time();
+            if ($claims['iat'] > ($now + 60)) { // > 60s in future
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
+            // Attach claims for controllers
             $request->attributes->set('jwt', $claims);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'invalid token'], 401);

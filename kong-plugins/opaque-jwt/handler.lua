@@ -2,7 +2,7 @@ local redis = require "resty.redis"
 local kong = kong
 
 local plugin = {
-  PRIORITY = 1000, -- run early
+  PRIORITY = 1000,
   VERSION = "1.0.0",
 }
 
@@ -52,16 +52,27 @@ end
 
 function plugin:access(conf)
   local opaque = get_bearer_token()
-  
+
+  -- No token → public route
   if not opaque or opaque == "" then
     return
   end
 
-  -- If it already looks like a JWT (three dot-separated parts), skip.
+  --------------------------------------------------------------------
+  -- 🔒 ALWAYS preserve opaque token BEFORE any early returns
+  --------------------------------------------------------------------
+  kong.service.request.set_header("X-Opaque-Token", opaque)
+
+  --------------------------------------------------------------------
+  -- If already a JWT (logout/debug cases), DO NOT touch it
+  --------------------------------------------------------------------
   if opaque:match("^[A-Za-z0-9%-%_]+=*%.[A-Za-z0-9%-%_]+=*%.[A-Za-z0-9%-%_]+=*$") then
     return
   end
 
+  --------------------------------------------------------------------
+  -- Worker cache
+  --------------------------------------------------------------------
   local cache_key = "opaque_jwt:" .. opaque
   if conf.cache_ttl_sec and conf.cache_ttl_sec > 0 then
     local cached = kong.cache:get(cache_key, nil, function() return nil end)
@@ -71,29 +82,24 @@ function plugin:access(conf)
     end
   end
 
+  --------------------------------------------------------------------
+  -- Redis lookup
+  --------------------------------------------------------------------
   local r, err = redis_connect(conf)
   if not r then
     kong.log.err("[opaque-jwt] ", err)
-    if conf.fail_open then
-      return
-    end
+    if conf.fail_open then return end
     return kong.response.exit(503, { message = "auth unavailable" })
   end
 
   local key = conf.key_prefix .. opaque
   local jwt, err2 = redis_get_jwt(r, key)
 
-  -- try to put connection back in pool
-  local ok_keepalive, err_keepalive = r:set_keepalive(10000, 100)
-  if not ok_keepalive then
-    kong.log.warn("[opaque-jwt] redis keepalive failed: ", err_keepalive)
-  end
+  r:set_keepalive(10000, 100)
 
   if err2 then
     kong.log.err("[opaque-jwt] ", err2)
-    if conf.fail_open then
-      return
-    end
+    if conf.fail_open then return end
     return kong.response.exit(503, { message = "auth unavailable" })
   end
 
@@ -101,12 +107,19 @@ function plugin:access(conf)
     return kong.response.exit(401, { message = "invalid token" })
   end
 
+  --------------------------------------------------------------------
+  -- Cache JWT
+  --------------------------------------------------------------------
   if conf.cache_ttl_sec and conf.cache_ttl_sec > 0 then
-    -- store in kong worker cache
-    kong.cache:invalidate_local(cache_key) -- avoid weird stale set
-    kong.cache:get(cache_key, { ttl = conf.cache_ttl_sec }, function() return jwt end)
+    kong.cache:invalidate_local(cache_key)
+    kong.cache:get(cache_key, { ttl = conf.cache_ttl_sec }, function()
+      return jwt
+    end)
   end
 
+  --------------------------------------------------------------------
+  -- Rewrite Authorization → JWT (opaque NEVER leaves gateway)
+  --------------------------------------------------------------------
   kong.service.request.set_header("authorization", "Bearer " .. jwt)
 end
 

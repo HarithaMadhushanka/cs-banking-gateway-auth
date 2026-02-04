@@ -11,40 +11,43 @@ class LoginController extends Controller
 {
     public function login(Request $request)
     {
-        // Minimal demo input (replace with real user auth later)
         $request->validate([
             'email' => ['required', 'email'],
         ]);
 
-        // For now: pretend the user is authenticated
+        // Demo-only: replace with real auth later
         $userId = 1;
         $email = $request->input('email');
-        $ttlSeconds = 900; // 15 min session
+
+        $ttlSeconds = 900; // 15 minutes
         $now = time();
-
-        $payload = [
-            'iss' => config('app.url'),          // issuer
-            'aud' => 'banking-gateway',          // audience (pick a fixed string)
-            'sub' => $userId,                    // subject (user id)
-            'email' => $email,
-
-            'iat' => $now,
-            'nbf' => $now - 5,                   // allow small clock skew (5s)
-            'exp' => $now + $ttlSeconds,
-
-            'jti' => (string) Str::uuid(),       // unique token id
-        ];
 
         $secret = env('JWT_SECRET');
         if (!$secret) {
             return response()->json(['message' => 'JWT_SECRET not set'], 500);
         }
 
-        $jwt = JWT::encode($payload, $secret, 'HS256');
-
+        // Opaque token (client-facing)
         $opaque = 'opaque_' . Str::random(48);
 
-        // Gateway will lookup this
+        $payload = [
+            'typ' => 'access',                  // token type
+            'iss' => config('app.url'),         // issuer
+            'aud' => 'banking-gateway',         // audience
+            'sub' => $userId,                   // user id
+            'email' => $email,
+
+            'iat' => $now,
+            'nbf' => $now - 5,                  // tolerate small skew
+            'exp' => $now + $ttlSeconds,
+
+            'jti' => (string) Str::uuid(),      // unique token id
+            'sid' => $opaque,                   // session id (bind jwt to opaque)
+        ];
+
+        $jwt = JWT::encode($payload, $secret, 'HS256');
+
+        // Redis mapping for gateway lookup
         Redis::setex("opaque:token:{$opaque}", $ttlSeconds, $jwt);
 
         return response()->json([

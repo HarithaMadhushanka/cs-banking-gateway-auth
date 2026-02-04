@@ -5,6 +5,7 @@ services:
   - name: auth-service
     url: http://auth-service:9000/api
     routes:
+
       - name: auth-routes
         paths:
           - /api/auth
