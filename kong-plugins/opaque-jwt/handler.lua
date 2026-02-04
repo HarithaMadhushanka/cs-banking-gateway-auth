@@ -64,10 +64,10 @@ function plugin:access(conf)
   kong.service.request.set_header("X-Opaque-Token", opaque)
 
   --------------------------------------------------------------------
-  -- If already a JWT (logout/debug cases), DO NOT touch it
+  -- Only accept opaque tokens (client must NEVER send JWT)
   --------------------------------------------------------------------
-  if opaque:match("^[A-Za-z0-9%-%_]+=*%.[A-Za-z0-9%-%_]+=*%.[A-Za-z0-9%-%_]+=*$") then
-    return
+  if not opaque:match("^opaque_") then
+    return kong.response.exit(401, { message = "invalid token" })
   end
 
   --------------------------------------------------------------------
