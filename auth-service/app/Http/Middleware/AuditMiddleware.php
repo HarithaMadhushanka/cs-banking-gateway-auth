@@ -2,40 +2,43 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use App\Models\AuditLog;
-use Illuminate\Support\Facades\DB;
 
 class AuditMiddleware
 {
     public function handle(Request $request, Closure $next)
     {
-        // Determine correlation ID
+        // Resolve or generate correlation ID
         $correlationId =
             $request->header('X-Correlation-ID')
             ?? $request->header('X-Request-ID')
             ?? (string) Str::uuid();
 
-        // Write audit log
-        DB::table('audit_logs')->insert([
+        // Ensure request carries correlation ID
+        $request->headers->set('X-Correlation-ID', $correlationId);
+
+        // IMPORTANT: allow auth + routing to run first
+        $response = $next($request);
+
+        // Write audit entry AFTER request is processed
+        AuditLog::create([
             'user_id' => optional($request->user())->id,
-            'event_type' => $request->method().' '.$request->path(),
+            'event_type' => strtoupper($request->method()) . ' ' . $request->path(),
             'ip' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 255),
             'correlation_id' => substr($correlationId, 0, 64),
-            'metadata' => json_encode([
+            'metadata' => [
                 'query' => $request->query(),
-            ]),
-            'created_at' => now(),
-            'updated_at' => now(),
+                'status' => method_exists($response, 'getStatusCode')
+                    ? $response->getStatusCode()
+                    : null,
+            ],
         ]);
 
-        // Let request continue
-        $response = $next($request);
-
-        // Attach correlation ID to response
+        // Propagate correlation ID back to client
         $response->headers->set('X-Correlation-ID', $correlationId);
 
         return $response;

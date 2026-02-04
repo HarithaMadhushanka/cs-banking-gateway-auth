@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use App\Models\User;
 
 class VerifyJwt
 {
@@ -30,14 +31,14 @@ class VerifyJwt
 
         try {
             // Allow clock skew (seconds) when validating exp/nbf/iat
-            JWT::$leeway = 30;
+            JWT::$leeway = (int) env('JWT_LEEWAY_SECONDS', 10);
 
             // Validates signature + exp/iat/nbf automatically
             $decoded = JWT::decode($token, new Key($secret, 'HS256'));
             $claims = (array) $decoded;
 
             // Required claims
-            $required = ['typ', 'iss', 'aud', 'sub', 'iat', 'nbf', 'exp', 'jti'];
+            $required = ['typ','iss','aud','sub','iat','nbf','exp','jti','sid'];
             foreach ($required as $k) {
                 if (!array_key_exists($k, $claims)) {
                     return response()->json(['message' => 'invalid token'], 401);
@@ -50,15 +51,30 @@ class VerifyJwt
             }
 
             // Issuer & audience
-            if (($claims['iss'] ?? null) !== config('app.url')) {
+            if (($claims['iss'] ?? null) !== env('JWT_ISSUER', 'auth-service')) {
                 return response()->json(['message' => 'invalid token'], 401);
             }
-            if (($claims['aud'] ?? null) !== 'banking-gateway') {
+            if (($claims['aud'] ?? null) !== env('JWT_AUDIENCE', 'banking-gateway')) {
                 return response()->json(['message' => 'invalid token'], 401);
             }
 
             // Subject sanity (user id)
             if (!is_int($claims['sub']) && !(is_string($claims['sub']) && ctype_digit($claims['sub']))) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
+            $userId = (int) $claims['sub'];
+            $user = User::find($userId);
+            if (!$user) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
+            if (!is_string($claims['sid'] ?? null) || !str_starts_with($claims['sid'], 'opaque_')) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
+            $opaqueHeader = $request->header('X-Opaque-Token');
+            if (!$opaqueHeader || $opaqueHeader !== $claims['sid']) {
                 return response()->json(['message' => 'invalid token'], 401);
             }
 
@@ -79,6 +95,7 @@ class VerifyJwt
 
             // Attach claims for controllers
             $request->attributes->set('jwt', $claims);
+            $request->setUserResolver(fn () => $user);
         } catch (\Throwable $e) {
             return response()->json(['message' => 'invalid token'], 401);
         }

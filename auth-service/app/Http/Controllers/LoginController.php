@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 use Firebase\JWT\JWT;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 class LoginController extends Controller
 {
@@ -13,37 +15,47 @@ class LoginController extends Controller
     {
         $request->validate([
             'email' => ['required', 'email'],
+            'password' => ['required', 'string', 'min:6'],
         ]);
 
-        // Demo-only: replace with real auth later
-        $userId = 1;
         $email = $request->input('email');
+        $password = $request->input('password');
 
-        $ttlSeconds = 900; // 15 minutes
-        $now = time();
+        $user = User::where('email', $email)->first();
+
+        if (!$user || !Hash::check($password, $user->password)) {
+            return response()->json(['message' => 'invalid credentials'], 401);
+        }
+
+        $userId = (int) $user->id;
+
+        $opaque = 'opaque_' . Str::random(48);
 
         $secret = env('JWT_SECRET');
         if (!$secret) {
             return response()->json(['message' => 'JWT_SECRET not set'], 500);
         }
 
-        // Opaque token (client-facing)
-        $opaque = 'opaque_' . Str::random(48);
+        $ttlSeconds = (int) env('JWT_TTL_SECONDS', 900);
+        $now = time();
+
+        $issuer = env('JWT_ISSUER', 'auth-service');
+        $aud = env('JWT_AUDIENCE', 'banking-gateway');
 
         $payload = [
-            'typ' => 'access',                  // token type
-            'iss' => config('app.url'),         // issuer
-            'aud' => 'banking-gateway',         // audience
-            'sub' => $userId,                   // user id
-            'email' => $email,
+            'typ' => 'access',
+            'iss' => $issuer,
+            'aud' => $aud,
+            'sub' => $userId,
 
             'iat' => $now,
-            'nbf' => $now - 5,                  // tolerate small skew
+            'nbf' => $now - 5,
             'exp' => $now + $ttlSeconds,
 
-            'jti' => (string) Str::uuid(),      // unique token id
-            'sid' => $opaque,                   // session id (bind jwt to opaque)
+            'jti' => (string) Str::uuid(),
+            'sid' => $opaque, // bind to opaque session
         ];
+
 
         $jwt = JWT::encode($payload, $secret, 'HS256');
 
@@ -54,6 +66,11 @@ class LoginController extends Controller
             'access_token' => $opaque,
             'token_type' => 'Bearer',
             'expires_in' => $ttlSeconds,
+            'user' => [
+                'id' => $user->id,
+                'email' => $user->email,
+                'name' => $user->name,
+            ],
         ]);
     }
 }
