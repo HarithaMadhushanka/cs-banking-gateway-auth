@@ -25,6 +25,8 @@ services:
   auth-service:
     build: ./auth-service
     container_name: auth-service
+    environment:
+      MFA_DEBUG_RETURN_OTP: "true"
     working_dir: /app
     command: sh -lc "php -S 0.0.0.0:9000 -t public"
     volumes:
@@ -33,6 +35,38 @@ services:
       - mysql
     expose:
       - "9000"
+
+  fms-service:
+    build:
+      context: ../banking-fms-service/fms-service
+      dockerfile: Dockerfile
+    container_name: fms-service
+    working_dir: /app
+    command: sh -lc "php -S 0.0.0.0:9100 -t public"
+    volumes:
+      - ../banking-fms-service/fms-service:/app
+    depends_on:
+      - fms-mysql
+    ports:
+      - "9100:9100"
+
+  fms-mysql:
+    image: mysql:8.4
+    container_name: fms-mysql
+    environment:
+      MYSQL_DATABASE: fms_db
+      MYSQL_USER: fms_user
+      MYSQL_PASSWORD: fms_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    ports:
+      - "3308:3306"
+    volumes:
+      - fms_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   mysql:
     image: mysql:8.4
@@ -60,3 +94,4 @@ services:
 
 volumes:
   mysql_data:
+  fms_mysql_data:

@@ -34,5 +34,7 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
-
+    'fms' => [
+        'base_url' => env('FMS_BASE_URL', 'http://fms-service:9100'),
+    ],
 ];

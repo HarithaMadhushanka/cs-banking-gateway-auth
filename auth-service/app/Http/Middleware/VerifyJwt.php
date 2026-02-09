@@ -8,6 +8,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use App\Models\User;
+use Illuminate\Support\Facades\Redis;
+
 
 class VerifyJwt
 {
@@ -77,6 +79,19 @@ class VerifyJwt
             if (!$opaqueHeader || $opaqueHeader !== $claims['sid']) {
                 return response()->json(['message' => 'invalid token'], 401);
             }
+
+            // Enforce revocation: sid (opaque token) must still be present in Redis and match this JWT
+            $redisKey = "opaque:token:{$claims['sid']}";
+            $storedJwt = Redis::get($redisKey);
+
+            if (!$storedJwt) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
+            if (!hash_equals($storedJwt, $token)) {
+                return response()->json(['message' => 'invalid token'], 401);
+            }
+
 
             // Time claim sanity (must be ints)
             foreach (['iat', 'nbf', 'exp'] as $t) {

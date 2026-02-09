@@ -33,3 +33,29 @@ services:
               redis_timeout_ms: 2000
               key_prefix: "opaque:token:"
               fail_open: false
+
+  - name: fms-service
+    url: http://fms-service:9100
+    routes:
+      - name: fms-routes
+        paths:
+          - /api/fms
+        strip_path: true
+        methods:
+         - GET
+         - POST
+        plugins:
+          - name: correlation-id
+            config:
+              header_name: X-Correlation-ID
+              generator: uuid
+              echo_downstream: true
+
+          - name: rate-limiting
+            config:
+              policy: local
+              limit_by: ip
+              minute: 60
+              hour: 500
+              fault_tolerant: true
+              hide_client_headers: false
