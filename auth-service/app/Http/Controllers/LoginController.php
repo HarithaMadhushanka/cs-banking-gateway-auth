@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use App\Services\FmsClient;
 use App\Models\MfaChallenge;
+use Illuminate\Support\Facades\Mail;
 
 class LoginController extends Controller
 {
@@ -142,6 +143,14 @@ class LoginController extends Controller
                 'device_id' => $deviceId,
                 'correlation_id' => substr($correlationId, 0, 64),
             ]);
+
+            Mail::raw(
+                "Your OTP code is: {$otp}\n\nIt expires in 5 minutes.\n\nIf you didn't request this, ignore this email.",
+                function ($message) use ($user) {
+                    $message->to($user->email)->subject('Your MFA OTP Code');
+                }
+            );
+
 
             $debugOtp = filter_var(env('MFA_DEBUG_RETURN_OTP', false), FILTER_VALIDATE_BOOL);
 

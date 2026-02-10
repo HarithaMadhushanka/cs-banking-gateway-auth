@@ -9,6 +9,9 @@ services:
         paths:
           - /api/auth
         strip_path: true
+        methods:
+         - GET
+         - POST
         plugins:
           - name: correlation-id
             config:
