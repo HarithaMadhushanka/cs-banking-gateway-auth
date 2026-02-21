@@ -78,7 +78,7 @@ class LoginController extends Controller
                 $decision = $fmsRes['json']['decision'] ?? null;
                 if ($decision === 'BLOCK') {
                     return response()->json([
-                        'message' => 'login blocked by risk policy',
+                        'message' => 'Login blocked by risk policy',
                         'decision' => 'BLOCK',
                         'triggered_rules' => $fmsRes['json']['triggered_rules'] ?? [],
                         'expires_in' => $fmsRes['json']['expires_in'] ?? null,
@@ -121,7 +121,7 @@ class LoginController extends Controller
 
         if ($decision === 'BLOCK') {
             return response()->json([
-                'message' => 'login blocked by risk policy',
+                'message' => 'Login blocked by risk policy',
                 'decision' => 'BLOCK',
                 'triggered_rules' => $triggeredRules,
                 'expires_in' => $expiresIn,
@@ -187,6 +187,7 @@ class LoginController extends Controller
             'iss' => $issuer,
             'aud' => $aud,
             'sub' => $userId,
+            'role' => $user->role ?? 'user',
             'iat' => $now,
             'nbf' => $now - 5,
             'exp' => $now + $ttlSeconds,
@@ -205,6 +206,7 @@ class LoginController extends Controller
                 'id' => $user->id,
                 'email' => $user->email,
                 'name' => $user->name,
+                'role' => $user->role ?? 'user',
             ],
         ]);
     }

@@ -82,11 +82,14 @@ class MfaController extends Controller
         $issuer = env('JWT_ISSUER', 'auth-service');
         $aud = env('JWT_AUDIENCE', 'banking-gateway');
 
+        $user = \App\Models\User::find((int) $challenge->user_id);
+
         $payload = [
             'typ' => 'access',
             'iss' => $issuer,
             'aud' => $aud,
             'sub' => (int) $challenge->user_id,
+            'role' => $user?->role ?? 'user',
             'iat' => $now,
             'nbf' => $now - 5,
             'exp' => $now + $ttlSeconds,

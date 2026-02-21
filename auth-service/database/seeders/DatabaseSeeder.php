@@ -19,18 +19,12 @@ class DatabaseSeeder extends Seeder
         // Demo users (idempotent)
         User::updateOrCreate(
             ['email' => 'test@example.com'],
-            [
-                'name' => 'Test User',
-                'password' => Hash::make('password'),
-            ]
+            ['name' => 'Test User', 'password' => Hash::make('password'), 'role' => 'user']
         );
 
         User::updateOrCreate(
             ['email' => 'admin@example.com'],
-            [
-                'name' => 'Admin User',
-                'password' => Hash::make('password'),
-            ]
+            ['name' => 'Admin User', 'password' => Hash::make('password'), 'role' => 'admin']
         );
-    }
+            }
 }

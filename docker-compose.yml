@@ -27,6 +27,7 @@ services:
     container_name: auth-service
     environment:
       MFA_DEBUG_RETURN_OTP: "true"
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
     working_dir: /app
     command: sh -lc "php -S 0.0.0.0:9000 -t public"
     volumes:
@@ -42,6 +43,8 @@ services:
       context: ../banking-fms-service/fms-service
       dockerfile: Dockerfile
     container_name: fms-service
+    environment:
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
     working_dir: /app
     command: sh -lc "php -S 0.0.0.0:9100 -t public"
     volumes:
